@@ -11,7 +11,7 @@ import { decodeFrame, type RawProtoMessage } from '../proto/douyin.proto.js';
 
 export interface LiveSessionOptions {
   onMessage: (msg: RawProtoMessage, frame: { roomId: string }) => void;
-  /** 捕获到第一个帧时的回调（用于确认 wss 已建立） */
+  /** 弹幕通道建立（或断开后重新收到推送帧）时的回调 */
   onOpen?: () => void;
   /** 会话错误回调 */
   onError?: (err: Error) => void;
@@ -31,6 +31,8 @@ export class LiveSession {
   private frameCount = 0;
   private msgCount = 0;
   private stopped = false;
+  /** 收到过抖音推送帧的 WebSocket（CDP requestId），只有它们关闭才算弹幕断开 */
+  private pushSockets = new Set<string>();
 
   constructor(roomId: string, page: Page, cdp: CDPSession, opts: LiveSessionOptions) {
     this.roomId = roomId;
@@ -43,6 +45,7 @@ export class LiveSession {
   private attach(): void {
     // CDP 的 webSocketFrameReceived 事件不含 url，无法按连接过滤；
     // 直接对全部帧尝试解码，非 PushFrame / 非法帧会被 decodeFrame 安全忽略（无副作用）。
+    // 页面上还有别的 WebSocket，用 requestId 记下真正推送弹幕的那条连接。
     this.cdp.on('Network.webSocketFrameReceived', (params: any) => {
       this.wsCount++;
       const payloadData: string | undefined = params?.response?.payloadData;
@@ -60,7 +63,10 @@ export class LiveSession {
         return;
       }
       this.frameCount++;
-      if (this.status === 'connecting') {
+      const isPush = decoded.frame.payloadType === 'msg' || decoded.frame.payloadType === 'push';
+      if (isPush && params?.requestId) this.pushSockets.add(String(params.requestId));
+      // 首次建立，或弹幕通道断开后又收到推送帧（抖音重连）→ 恢复为 live
+      if (isPush && this.status !== 'live' && !this.stopped) {
         this.status = 'live';
         this.opts.onOpen?.();
       }
@@ -69,8 +75,10 @@ export class LiveSession {
         this.opts.onMessage(msg, { roomId: this.roomId });
       }
     });
-    this.cdp.on('Network.webSocketClosed', () => {
-      if (!this.stopped) {
+    this.cdp.on('Network.webSocketClosed', (params: any) => {
+      // 页面上其它 WebSocket 关闭与弹幕无关；只有推送弹幕的连接全部关闭才算断开
+      if (!this.pushSockets.delete(String(params?.requestId))) return;
+      if (!this.stopped && this.pushSockets.size === 0) {
         this.status = 'closed';
         this.opts.onError?.(new Error(`房间 ${this.roomId} wss 连接已关闭`));
       }

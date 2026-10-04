@@ -144,6 +144,10 @@ export class Collector {
     const { page, cdp } = await this.browser.openRoom(url);
     const session = new LiveSession(roomId, page, cdp, {
       onMessage: (msg, meta) => this.onMessage(msg, meta),
+      // 弹幕通道（重新）建立：清掉之前的断开错误
+      onOpen: () => {
+        this.errors.delete(roomId);
+      },
       onError: (err) => {
         this.errors.set(roomId, err.message);
       },
