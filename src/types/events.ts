@@ -30,6 +30,16 @@ export interface DanmakuUser {
   nickname: string;  // 昵称
   avatar?: string;   // 头像 URL（列表中的首个）
   secUid?: string;   // 安全 uid
+  payLevel?: number; // 财富等级（抖音消费等级）；消息未携带时缺省
+  fansClub?: DanmakuFansClub; // 粉丝团；未加入时缺省
+}
+
+/** 用户所在粉丝团（抖音 User.fansClub.data） */
+export interface DanmakuFansClub {
+  name: string;      // 粉丝团名称
+  level: number;     // 粉丝团等级
+  status?: number;   // 抖音 userFansClubStatus（原样透传，推测为灯牌是否点亮）
+  anchorId?: string; // 粉丝团所属主播 uid；一般为本直播间主播，可据此核对
 }
 
 /** 基础事件 */

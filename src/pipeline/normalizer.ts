@@ -7,6 +7,7 @@
 
 import type {
   DanmakuEvent,
+  DanmakuFansClub,
   DanmakuUser,
   GiftEvent,
   ChatEvent,
@@ -23,6 +24,22 @@ function toUser(body: any): DanmakuUser | undefined {
     nickname: u.nickName || '',
     avatar: extractAvatar(u),
     secUid: u.secUid || undefined,
+    payLevel: u.payGrade ? Number(longToStr(u.payGrade.level) || 0) : undefined,
+    fansClub: toFansClub(u.fansClub?.data),
+  };
+}
+
+/** 粉丝团：名称为空且等级为 0 视为未加入，不输出。 */
+function toFansClub(d: any): DanmakuFansClub | undefined {
+  if (!d) return undefined;
+  const name = String(d.clubName ?? '');
+  const level = Number(d.level ?? 0);
+  if (!name && !level) return undefined;
+  return {
+    name,
+    level,
+    status: d.userFansClubStatus ? Number(d.userFansClubStatus) : undefined,
+    anchorId: longToStr(d.anchorId) || undefined,
   };
 }
 

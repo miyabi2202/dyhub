@@ -118,12 +118,28 @@ message User {
   Image avatarThumb = 9;
   Image avatarMedium = 10;
   Image avatarLarge = 11;
+  PayGrade payGrade = 23;
+  FansClub fansClub = 24;
   string secUid = 46;
   string idStr = 1029;
 }
 message Image {
   repeated string urlList = 1;
   string uri = 2;
+}
+// 财富等级（消费等级）。只声明用到的字段，字段号对照 DouyinBarrageGrab 的 User.PayGrade。
+message PayGrade {
+  int64 level = 6;
+}
+// 粉丝团。data 为当前展示的粉丝团（一般是本直播间主播的），对照 DouyinBarrageGrab 的 User.FansClub。
+message FansClub {
+  FansClubData data = 1;
+}
+message FansClubData {
+  string clubName = 1;
+  int32 level = 2;
+  int32 userFansClubStatus = 3;
+  int64 anchorId = 6;
 }
 `;
 

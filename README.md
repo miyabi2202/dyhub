@@ -166,13 +166,17 @@ curl -X POST http://localhost:8757/api/rooms/connect \
     "id": "101652211600",
     "nickname": "田💕心",
     "avatar": "https://p3.douyinpic.com/aweme/100x100/...",
-    "secUid": "MS4wLjAB..."
+    "secUid": "MS4wLjAB...",
+    "payLevel": 23,
+    "fansClub": { "name": "甄选", "level": 12, "status": 1, "anchorId": "..." }
   },
   "data": { "content": "劲道牛肉丸，3袋立享88折！" }
 }
 ```
 
 > `roomId` 统一为用户连接的房间号（web_rid），与房间管理 / 订阅过滤一致。
+
+> **用户等级**：`user.payLevel` 为财富等级（抖音 `User.payGrade.level`），`user.fansClub` 为粉丝团名称与等级（`User.fansClub.data`），所有带用户的事件都会携带；消息里没有时字段缺省（未加入粉丝团则无 `fansClub`）。`fansClub` 一般是本直播间主播的粉丝团，可用 `anchorId` 核对。
 
 **事件类型**：
 
