@@ -126,9 +126,13 @@ if (envCookie) {
   loadFromDisk();
 }
 
-/** 设置 cookie（覆盖）。persist=true 时写入磁盘，false 时删除磁盘文件 */
-export function setCookie(str: string, opts?: { persist?: boolean }): void {
-  const { store: parsed, expiresAt: exp } = parseCookieStr(str);
+/**
+ * 设置 cookie（覆盖）。persist=true 时写入磁盘，false 时删除磁盘文件。
+ * expiresAt 用于调用方已知过期时间的场景（如扫码登录从浏览器读到的 cookie）。
+ */
+export function setCookie(str: string, opts?: { persist?: boolean; expiresAt?: number | null }): void {
+  const { store: parsed, expiresAt: parsedExp } = parseCookieStr(str);
+  const exp = opts?.expiresAt ?? parsedExp;
   store = parsed;
   expiresAt = exp;
   const persist = opts?.persist ?? false;

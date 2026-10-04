@@ -29,6 +29,28 @@ const DEFAULT_CHROME_PATHS = [
 const FALLBACK_HEADLESS_SHELL =
   process.env.HOME + '/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell';
 
+/** 探测本机 Chrome / Chromium 可执行文件路径，找不到返回 undefined */
+export function findChrome(): string | undefined {
+  for (const p of DEFAULT_CHROME_PATHS) {
+    try {
+      if (existsSync(p)) return p;
+    } catch {
+      /* ignore */
+    }
+  }
+  // playwright 缓存的 headless shell 兜底
+  try {
+    if (existsSync(FALLBACK_HEADLESS_SHELL)) return FALLBACK_HEADLESS_SHELL;
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+/** 默认桌面 UA（采集与扫码登录共用） */
+export const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 export interface BrowserManagerOptions {
   /** Chrome 可执行文件路径，缺省时自动探测 */
   executablePath?: string;
@@ -51,29 +73,10 @@ export class BrowserManager {
 
   constructor(opts: BrowserManagerOptions = {}) {
     this.opts = {
-      executablePath: opts.executablePath ?? this.detectChrome() ?? '',
-      userAgent:
-        opts.userAgent ??
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      executablePath: opts.executablePath ?? findChrome() ?? '',
+      userAgent: opts.userAgent ?? DEFAULT_USER_AGENT,
       headless: opts.headless ?? true,
     };
-  }
-
-  private detectChrome(): string | undefined {
-    for (const p of DEFAULT_CHROME_PATHS) {
-      try {
-        if (existsSync(p)) return p;
-      } catch {
-        /* ignore */
-      }
-    }
-    // playwright 缓存的 headless shell 兜底
-    try {
-      if (existsSync(FALLBACK_HEADLESS_SHELL)) return FALLBACK_HEADLESS_SHELL;
-    } catch {
-      /* ignore */
-    }
-    return undefined;
   }
 
   async init(): Promise<void> {

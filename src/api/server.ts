@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { Collector } from '../collector/collector.js';
 import * as cookieStore from '../collector/cookieStore.js';
+import * as loginWindow from '../collector/loginWindow.js';
 import { EventBus } from '../pipeline/eventBus.js';
 import { WebhookDispatcher } from '../dispatch/webhook.js';
 import { registerSseRoute } from '../dispatch/sseServer.js';
@@ -59,6 +60,19 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   app.delete('/api/cookie', async () => {
     cookieStore.clear();
     return { ok: true, ...cookieStore.getStatus() };
+  });
+
+  // ---- 网页登录（弹出 Chrome 窗口打开抖音，用户登录后自动写入 cookie）----
+  app.post('/api/cookie/login', async (req) => {
+    const { persist } = (req.body ?? {}) as { persist?: boolean };
+    return loginWindow.start({ persist: persist ?? false });
+  });
+
+  app.get('/api/cookie/login', async () => loginWindow.getState());
+
+  app.delete('/api/cookie/login', async () => {
+    await loginWindow.cancel();
+    return loginWindow.getState();
   });
 
   // ---- 房间管理 ----

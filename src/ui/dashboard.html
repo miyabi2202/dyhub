@@ -182,10 +182,15 @@
         <textarea id="cookieInput" placeholder="浏览器 F12 → Network → 请求头 → Cookie，粘贴整行" style="width:100%;height:56px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:11px;resize:vertical;outline:none;font-family:'SF Mono',Menlo,monospace;line-height:1.4;"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
           <button id="btnSaveCookie">保存</button>
+          <button id="btnWebLogin" class="ghost">网页登录</button>
           <button id="btnClearCookie" class="ghost">清除</button>
           <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto;color:var(--muted);">
             <input type="checkbox" id="cookieRemember" style="accent-color:var(--accent-dark);" /> 记住我
           </label>
+        </div>
+        <div id="loginBox" style="display:none;margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;align-items:center;gap:8px;">
+          <div id="loginMsg" style="font-size:12px;line-height:1.5;flex:1;"></div>
+          <button id="btnLoginCancel" class="ghost" style="padding:4px 10px;font-size:12px;">取消</button>
         </div>
         <div id="cookieExpiry" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;display:none;"></div>
         <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">含 <code>sessionid_ss</code> 等登录 cookie 可获取礼物事件</div>
@@ -784,6 +789,41 @@ curl -X POST http://${base}/api/webhooks \\
     await fetch('/api/cookie', { method: 'DELETE' });
     updateCookieStatus({ set: false, hasLogin: false, keys: [], expiresAt: null, savedAt: null, persisted: false });
   };
+  // ---- 网页登录（弹出抖音窗口）----
+  let loginTimer = null;
+  const loginActive = (st) => st.status === 'opening' || st.status === 'waiting';
+  function showLogin(st) {
+    const box = $('loginBox'), msg = $('loginMsg');
+    box.style.display = st.message ? 'flex' : 'none';
+    msg.textContent = st.message || '';
+    msg.style.color = st.status === 'error' || st.status === 'expired' ? '#a33' : st.status === 'success' ? '#2d7a4c' : 'var(--text)';
+    const active = loginActive(st);
+    $('btnLoginCancel').textContent = active ? '取消' : '关闭';
+    $('btnWebLogin').textContent = active ? '登录中…' : '网页登录';
+    $('btnWebLogin').disabled = active;
+    if (!active) { clearInterval(loginTimer); loginTimer = null; }
+    if (st.status === 'success') refreshCookieStatus();
+  }
+  async function pollLogin() {
+    try { showLogin(await (await fetch('/api/cookie/login')).json()); } catch {}
+  }
+  $('btnWebLogin').onclick = async () => {
+    showLogin({ status: 'opening', message: '正在打开抖音登录窗口…' });
+    const persist = $('cookieRemember').checked;
+    const r = await fetch('/api/cookie/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ persist }) });
+    showLogin(await r.json());
+    clearInterval(loginTimer);
+    loginTimer = setInterval(pollLogin, 1500);
+  };
+  $('btnLoginCancel').onclick = async () => {
+    const st = await (await fetch('/api/cookie/login')).json();
+    if (loginActive(st)) showLogin(await (await fetch('/api/cookie/login', { method: 'DELETE' })).json());
+    else $('loginBox').style.display = 'none';
+  };
+  // 页面打开时若有进行中的登录（例如刷新了页面），继续展示并轮询
+  fetch('/api/cookie/login').then((r) => r.json()).then((st) => {
+    if (loginActive(st)) { showLogin(st); loginTimer = setInterval(pollLogin, 1500); }
+  }).catch(() => {});
   refreshCookieStatus();
 
   connectWS();
