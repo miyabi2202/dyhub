@@ -50,23 +50,13 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   // ---- Cookie 管理（运行时注入登录态，使礼物事件可获取）----
   app.get('/api/cookie', async () => cookieStore.getStatus());
 
-  app.post('/api/cookie', async (req, reply) => {
-    const { cookie, persist } = (req.body ?? {}) as { cookie?: string; persist?: boolean };
-    if (!cookie || !cookie.trim()) return reply.code(400).send({ error: 'cookie 不能为空' });
-    cookieStore.setCookie(cookie, { persist: persist ?? false });
-    return { ok: true, ...cookieStore.getStatus() };
-  });
-
   app.delete('/api/cookie', async () => {
     cookieStore.clear();
     return { ok: true, ...cookieStore.getStatus() };
   });
 
   // ---- 网页登录（弹出 Chrome 窗口打开抖音，用户登录后自动写入 cookie）----
-  app.post('/api/cookie/login', async (req) => {
-    const { persist } = (req.body ?? {}) as { persist?: boolean };
-    return loginWindow.start({ persist: persist ?? false });
-  });
+  app.post('/api/cookie/login', async () => loginWindow.start());
 
   app.get('/api/cookie/login', async () => loginWindow.getState());
 

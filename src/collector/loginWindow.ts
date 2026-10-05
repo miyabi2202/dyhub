@@ -4,9 +4,9 @@
  * 扫码、短信验证码、滑块等都由抖音页面自己处理，我们只轮询浏览器 cookie：
  * 出现 sessionid_ss 等登录 cookie 即存入 cookieStore 并关闭窗口。
  *
- * 浏览器资料保存在 data/login-profile/（与 data/cookie.json 一样不入库），
- * 抖音会把它识别为同一台设备，再次登录通常无需重复验证。
- * 需要图形界面：Docker / 无显示器的服务器上请改用粘贴 cookie。
+ * 浏览器资料保存在 data/login-profile/（与 data/cookie.json 一样不入库）。
+ * 每次打开窗口前会清空其中的 cookie，确保总是重新登录（可切换账号）。
+ * 需要图形界面：Docker / 无显示器的服务器上请改用 DYHUB_COOKIE 环境变量。
  */
 
 import { chromium, type BrowserContext } from 'playwright-core';
@@ -72,7 +72,7 @@ export async function cancel(): Promise<void> {
 }
 
 /** 打开登录窗口，窗口出现后返回；之后在后台等待登录完成，用 getState() 轮询。 */
-export async function start(opts: { persist: boolean }): Promise<LoginState> {
+export async function start(): Promise<LoginState> {
   await cancel();
   const gen = ++generation;
   const alive = () => gen === generation;
@@ -101,6 +101,8 @@ export async function start(opts: { persist: boolean }): Promise<LoginState> {
     await ctx.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
+    // 清掉资料目录里上次的登录态，否则会直接沿用旧账号、窗口一闪而过，无法换号
+    await ctx.clearCookies();
 
     // 用户直接关掉窗口 = 取消
     ctx.on('close', () => {
@@ -117,7 +119,7 @@ export async function start(opts: { persist: boolean }): Promise<LoginState> {
     await page.bringToFront();
     setState('waiting', '请在弹出的窗口中登录抖音（扫码 / 验证码均可），完成后窗口会自动关闭');
 
-    void waitForLogin(gen, opts.persist);
+    void waitForLogin(gen);
     return state;
   } catch (e) {
     if (alive()) {
@@ -136,7 +138,7 @@ export async function start(opts: { persist: boolean }): Promise<LoginState> {
 }
 
 /** 轮询浏览器 cookie，出现登录 cookie 即保存并关闭窗口；超时则标记过期 */
-async function waitForLogin(gen: number, persist: boolean): Promise<void> {
+async function waitForLogin(gen: number): Promise<void> {
   const deadline = Date.now() + LOGIN_TIMEOUT_MS;
   while (gen === generation && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, POLL_MS));
@@ -156,7 +158,6 @@ async function waitForLogin(gen: number, persist: boolean): Promise<void> {
       .filter((c) => LOGIN_COOKIES.includes(c.name) && c.expires > 0)
       .map((c) => c.expires * 1000);
     cookieStore.setCookie(cookieStr, {
-      persist,
       expiresAt: expiries.length ? Math.min(...expiries) : null,
     });
     setState('success', '登录成功，cookie 已保存');

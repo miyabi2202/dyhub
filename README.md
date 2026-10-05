@@ -245,7 +245,7 @@ curl -X POST http://localhost:8757/api/webhooks \
 | DELETE | `/api/rooms/:roomId` | 彻底删除房间 |
 | GET | `/api/rooms/:roomId` | 单房间详情 |
 | GET | `/api/stats` | 全局统计（WS 客户端数 / 房间 / 事件量） |
-| GET/POST/DELETE | `/api/cookie` | 登录 Cookie 管理（查看状态 / 设置 / 清除），详见 [Cookie 配置指南](docs/cookie-guide.md) |
+| GET/DELETE | `/api/cookie` | 登录 Cookie 管理（查看状态 / 清除），详见 [Cookie 配置指南](docs/cookie-guide.md) |
 | GET | `/api/events?types=chat,gift&roomId=xxx` | SSE 实时事件流 |
 | GET/POST/DELETE | `/api/webhooks` | Webhook 订阅管理 |
 
