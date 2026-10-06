@@ -182,13 +182,15 @@ curl -X POST http://localhost:8757/api/rooms/connect \
 
 | type | 含义 | data 关键字段 |
 | --- | --- | --- |
-| `chat` | 弹幕 | `content` |
+| `chat` | 弹幕（含会员表情 / 大表情） | `content` / `parts` / `sticker` |
 | `gift` | 礼物 | `giftName` / `diamondCount` / `repeatCount` / `comboCount` / `groupCount` / `repeatEnd` / `groupId` / `combo`（需登录态 Cookie，见 [Cookie 指南](docs/cookie-guide.md)） |
 | `member` | 进场 | `memberCount` |
 | `like` | 点赞 | `count` / `total` |
 | `follow` | 关注 | `action` |
 | `room` | 直播间统计 | `total`（在线）/ `popularity` / `totalUser` |
 | `unknown` | 未识别消息透传 | `method` |
+
+> **表情**：`content` 是原始文本，常见表情是 `[比心]` 这样的方括号占位符。抖音下发富文本时（粉丝团 / 会员表情、@某人），`parts` 按顺序给出每一段：`{ "type": "text", "text" }`、`{ "type": "emote", "url", "name" }` 或 `{ "type": "mention", "text": "@昵称", "userId" }`，渲染时优先用 `parts`；纯表情弹幕的 `content` 可能为空。整条消息是一张大表情（`WebcastEmojiChatMessage`）时同样以 `chat` 下发，`sticker: true`，`parts` 只有那一张图，`content` 为抖音给的文字替代。表情图在抖音 CDN 上，`<img>` 需加 `referrerpolicy="no-referrer"`。
 
 > **礼物计数**：抖音对同一次送礼会推送多条 `WebcastGiftMessage`（连击进度 + 连击结束时一条 `repeatEnd: true` 的收尾消息），它们 `msgId` 不同、`groupId` 相同，因此不会被去重。按 `giftId + groupId` 合并、取 `repeatCount` 的增量计数，并忽略已见过的分组的收尾消息即可避免重复。
 

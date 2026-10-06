@@ -44,6 +44,7 @@ docker compose up -d --build   # 一键启动（内置 Chromium + 中文字体�
   - `roomMeta.ts` — 主播信息解析，从直播间 HTML 提取昵称/头像/标题，仅供展示，失败不影响采集。
 - **`src/pipeline/`** — 事件管道。
   - `normalizer.ts` — 翻译层：按 `method` 匹配 `WebcastChatMessage` / `WebcastGiftMessage` 等，映射为统一事件。未识别消息透传为 `unknown` 类型。**抖音改协议只影响此文件及解码器**。
+    - 弹幕富文本 `ChatMessage.rtfContentV2`（字段 41，`Text` → `TextPiece` → 图片 / @用户 / 文字）标准化为 `data.parts`；`WebcastEmojiChatMessage`（会员表情 / 大表情）也下发为 `chat`，带 `sticker: true`。字段号对照抖音网页端 live-schema 与 TikTok 解码器，旧 proto 里的 `rtfContent = 22` 已不适用。
   - `dedupe.ts` — 基于事件 id 的滑动窗口去重（容量 200k）。
   - `eventBus.ts` — 发布/订阅总线，解耦采集与消费。订阅者带 `EventFilter`（按 roomId / type 过滤）。
 - **`src/dispatch/`** — 分发层。三个分发器各自订阅 EventBus：

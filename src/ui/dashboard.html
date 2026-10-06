@@ -90,6 +90,8 @@
   .ev .what { flex: 1; word-break: break-word; }
   .emoji-img { display: inline-block; width: 20px; height: 20px; vertical-align: middle; margin: 0 1px; border-radius: 3px; object-fit: cover; }
   .test-feed .emoji-img { width: 16px; height: 16px; }
+  .emoji-img.sticker { width: 48px; height: 48px; border-radius: 6px; object-fit: contain; }
+  .test-feed .emoji-img.sticker { width: 32px; height: 32px; }
   .ev .tm { color: var(--muted); font-size: 11px; flex: 0 0 auto; }
   .empty { color: var(--muted); text-align: center; padding: 40px; font-size: 13px; }
   footer { flex: 0 0 auto; border-top: 1px solid var(--border); background: var(--card); padding: 8px 20px; font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
@@ -421,7 +423,7 @@ curl -X POST http://${base}/api/webhooks \\
     const giftIcon = (ev.type === 'gift' && ev.data?.giftIcon)
       ? `<img src="${escapeHtml(ev.data.giftIcon)}" referrerpolicy="no-referrer" style="width:18px;height:18px;vertical-align:middle;border-radius:3px;object-fit:cover;flex:0 0 auto;" onerror="this.style.display='none'" /> `
       : '';
-    line.innerHTML = `<span style="color:#999;flex:0 0 auto">${t}</span> <span class="ty">[${label[ev.type] || ev.type}]</span>${av}${giftIcon}<span style="color:#4a90b8">${escapeHtml(who)}</span> <span>${ev.type === 'chat' ? renderChatContent(ev.data?.content) : escapeHtml(String(what))}</span>`;
+    line.innerHTML = `<span style="color:#999;flex:0 0 auto">${t}</span> <span class="ty">[${label[ev.type] || ev.type}]</span>${av}${giftIcon}<span style="color:#4a90b8">${escapeHtml(who)}</span> <span>${ev.type === 'chat' ? renderChatContent(ev.data) : escapeHtml(String(what))}</span>`;
     feed.appendChild(line);
     while (feed.children.length > 300) feed.removeChild(feed.firstChild);
     feed.scrollTop = feed.scrollHeight;
@@ -434,9 +436,22 @@ curl -X POST http://${base}/api/webhooks \\
     return '';
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
-  // 弹幕表情渲染：将 [表情名] 占位符替换为抖音 CDN 表情图
+  // 弹幕渲染：有富文本分段（data.parts，含粉丝团 / 会员表情图）时逐段渲染，
+  // 否则把 content 里的 [表情名] 占位符替换为抖音 CDN 表情图。
   // 参考: https://github.com/skmcj/dycast  — 用 split(/(\[.*?])/) 切分，逐段查表
-  function renderChatContent(text) {
+  function renderChatContent(data) {
+    if (Array.isArray(data?.parts) && data.parts.length) {
+      return data.parts.map((p) => {
+        if (p.type === 'emote') {
+          const name = escapeHtml(p.name || '[表情]');
+          return `<img class="emoji-img${data.sticker ? ' sticker' : ''}" src="${escapeHtml(p.url)}" alt="${name}" title="${name}" referrerpolicy="no-referrer" loading="lazy" />`;
+        }
+        return escapeHtml(p.text || '');
+      }).join('');
+    }
+    return renderEmojiText(data?.content);
+  }
+  function renderEmojiText(text) {
     if (!text) return '';
     const parts = String(text).split(/(\[.*?])/);
     let html = '';
@@ -571,7 +586,7 @@ curl -X POST http://${base}/api/webhooks \\
     let who = '', what = '';
     if (ev.user) who = ev.user.nickname || ev.user.id;
     switch (ev.type) {
-      case 'chat': what = renderChatContent(ev.data.content); break;
+      case 'chat': what = renderChatContent(ev.data); break;
       case 'gift': what = giftWhat(ev, giftCount(ev)); break;
       case 'member': what = '进入直播间'; break;
       case 'follow': what = '关注了主播'; break;

@@ -6,6 +6,7 @@
  */
 
 import type {
+  ChatPart,
   DanmakuEvent,
   DanmakuFansClub,
   DanmakuUser,
@@ -41,6 +42,45 @@ function toFansClub(d: any): DanmakuFansClub | undefined {
     status: d.userFansClubStatus ? Number(d.userFansClubStatus) : undefined,
     anchorId: longToStr(d.anchorId) || undefined,
   };
+}
+
+/** URL 列表中首个 http(s) 地址 */
+function firstUrl(urls: unknown): string | undefined {
+  if (!Array.isArray(urls)) return undefined;
+  return urls.find((u): u is string => typeof u === 'string' && u.startsWith('http'));
+}
+
+/**
+ * 富文本（webcast.data.Text）→ 分段：图片段为表情（名称取 Image.content），@用户段为 mention，
+ * 其余取文字。没有可用分段时返回 undefined，消费端回退到 content。
+ */
+function toParts(text: any): ChatPart[] | undefined {
+  const parts: ChatPart[] = [];
+  for (const piece of text?.pieces ?? []) {
+    const image = piece.imageValue?.image;
+    const url = firstUrl(image?.urlList);
+    if (url) {
+      parts.push({
+        type: 'emote',
+        url,
+        name: image.content?.name || image.content?.alternativeText || undefined,
+        width: Number(longToStr(image.width) || 0) || undefined,
+        height: Number(longToStr(image.height) || 0) || undefined,
+      });
+      continue;
+    }
+    const user = piece.userValue?.user;
+    if (user) {
+      parts.push({
+        type: 'mention',
+        text: `@${user.nickName || ''}`,
+        userId: user.idStr || longToStr(user.id) || undefined,
+      });
+      continue;
+    }
+    if (piece.stringValue) parts.push({ type: 'text', text: String(piece.stringValue) });
+  }
+  return parts.length ? parts : undefined;
 }
 
 /**
@@ -106,7 +146,26 @@ export function normalize(msg: RawProtoMessage, meta: { roomId: string }): Danma
       const ev: ChatEvent = {
         ...base,
         type: 'chat',
-        data: { content: String(body.content ?? '') },
+        data: {
+          content: String(body.content ?? ''),
+          parts: toParts(body.rtfContentV2) ?? toParts(body.rtfContent),
+        },
+      };
+      return ev;
+    }
+    case 'WebcastEmojiChatMessage': {
+      // 会员表情 / 大表情：以 chat 事件下发，parts 只有这一张图，content 为抖音给的文字替代。
+      const parts = toParts(body.emojiContent);
+      const name = parts?.find((p) => p.type === 'emote')?.name;
+      const ev: ChatEvent = {
+        ...base,
+        type: 'chat',
+        data: {
+          content: String(body.defaultContent || name || ''),
+          parts,
+          sticker: true,
+          emojiId: longToStr(body.emojiId) || undefined,
+        },
       };
       return ev;
     }

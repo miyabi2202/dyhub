@@ -54,9 +54,20 @@ export interface BaseDanmakuEvent {
   rawMethod?: string;  // 原始平台消息方法名（调试用）
 }
 
+/** 弹幕富文本的一段：文字、表情图片（含粉丝团 / 会员表情），或 @某人 */
+export type ChatPart =
+  | { type: 'text'; text: string }
+  | { type: 'emote'; url: string; name?: string; width?: number; height?: number }
+  | { type: 'mention'; text: string; userId?: string };
+
 export interface ChatEvent extends BaseDanmakuEvent {
   type: 'chat';
-  data: { content: string };
+  data: {
+    content: string;      // 原始文本（[比心] 等表情为方括号占位符）；纯表情消息可能为空
+    parts?: ChatPart[];   // 富文本分段，抖音下发了才有；渲染时优先于 content
+    sticker?: boolean;    // 整条消息是一张会员表情 / 大表情（WebcastEmojiChatMessage）
+    emojiId?: string;     // 大表情 id（sticker 时）
+  };
 }
 
 export interface GiftEvent extends BaseDanmakuEvent {

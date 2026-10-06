@@ -2,7 +2,8 @@
  * 抖音直播 protobuf 解码器
  *
  * 负责把从 CDP 截获的 WebSocket 二进制帧解码为原始消息（RawProtoMessage）。
- * 协议字段定义来自对 webcast push 帧的逆向观察（与 dycast / DouyinLiveWebFetcher 同源）。
+ * 协议字段定义来自对 webcast push 帧的逆向观察（与 dycast / DouyinLiveWebFetcher 同源）；
+ * 富文本（Text / TextPiece）与会员表情的字段号对照抖音网页端 live-schema 与 TikTok 客户端解码器。
  *
  * 帧结构：
  *   PushFrame(payloadType=msg) → gzip(payload) → Response → Message[] → 具体消息体
@@ -52,6 +53,36 @@ message ChatMessage {
   Common common = 1;
   User user = 2;
   string content = 3;
+  // 富文本：文字、@用户、表情图片（粉丝团 / 会员表情）逐段给出。字段号对照抖音网页端 live-schema
+  // 与 TikTok 客户端解码器（rtf_content = 40, rtf_content_v2 = 41）；旧 proto 里的 22 已不适用。
+  Text rtfContent = 40;
+  Text rtfContentV2 = 41;
+}
+// 会员表情 / 大表情：整条消息就是一张图，图在 emojiContent 的首段。
+message EmojiChatMessage {
+  Common common = 1;
+  User user = 2;
+  int64 emojiId = 3;
+  Text emojiContent = 4;
+  string defaultContent = 5;
+}
+// 富文本（webcast.data.Text）及其分段，字段号对照 putao520/douyin-proto-builder 的 live.data.proto。
+message Text {
+  string key = 1;
+  string defaultPattern = 2;
+  repeated TextPiece pieces = 4;
+}
+message TextPiece {
+  int32 type = 1;
+  string stringValue = 11;
+  TextPieceUser userValue = 21;
+  TextPieceImage imageValue = 25;
+}
+message TextPieceUser {
+  User user = 1;
+}
+message TextPieceImage {
+  Image image = 1;
 }
 message GiftMessage {
   Common common = 1;
@@ -126,6 +157,14 @@ message User {
 message Image {
   repeated string urlList = 1;
   string uri = 2;
+  int64 height = 3;
+  int64 width = 4;
+  ImageContent content = 8;
+  bool isAnimated = 9;
+}
+message ImageContent {
+  string name = 1;
+  string alternativeText = 4;
 }
 // 财富等级（消费等级）。只声明用到的字段，字段号对照 DouyinBarrageGrab 的 User.PayGrade。
 message PayGrade {
@@ -178,6 +217,7 @@ export interface DecodedMessage {
 
 export const MESSAGE_TYPES: Record<string, string> = {
   WebcastChatMessage: 'ChatMessage',
+  WebcastEmojiChatMessage: 'EmojiChatMessage',
   WebcastGiftMessage: 'GiftMessage',
   WebcastMemberMessage: 'MemberMessage',
   WebcastLikeMessage: 'LikeMessage',
