@@ -248,6 +248,8 @@ curl -X POST http://localhost:8757/api/webhooks \
 | DELETE | `/api/rooms/:roomId` | 彻底删除房间 |
 | GET | `/api/rooms/:roomId` | 单房间详情 |
 | POST | `/api/rooms/:roomId/chat` | 以登录账号发一条弹幕 `{text}`，返回 `{ok, echoed}`（需浏览器内核 + 网页登录；同一房间排队发送，间隔见 `DYHUB_CHAT_INTERVAL_MS`） |
+| GET | `/api/rooms/:roomId/stream` | 直播间播放器正在拉的流地址 `{url}`（FLV / HLS，带签名，可直接给 ffmpeg；需浏览器内核） |
+| GET | `/api/rooms/:roomId/screenshot` | 直播画面截图（`image/jpeg`，只截播放器；需浏览器内核） |
 | GET | `/api/stats` | 全局统计（WS 客户端数 / 房间 / 事件量） |
 | GET/DELETE | `/api/cookie` | 登录 Cookie 管理（查看状态 / 清除），详见 [Cookie 配置指南](docs/cookie-guide.md) |
 | GET | `/api/events?types=chat,gift&roomId=xxx` | SSE 实时事件流 |

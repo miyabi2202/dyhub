@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import fastifyStatic from '@fastify/static';
-import { Collector, SendChatError } from '../collector/collector.js';
+import { Collector, RoomActionError } from '../collector/collector.js';
 import * as cookieStore from '../collector/cookieStore.js';
 import * as loginWindow from '../collector/loginWindow.js';
 import { EventBus } from '../pipeline/eventBus.js';
@@ -126,10 +126,35 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
       const echoed = await echo;
       return { ok: true, echoed };
     } catch (e: any) {
-      const code = e instanceof SendChatError ? e.statusCode : 500;
+      const code = e instanceof RoomActionError ? e.statusCode : 500;
       return reply.code(code).send({ error: `发送失败: ${e?.message ?? e}` });
     } finally {
       deps.bus.unsubscribe(subId);
+    }
+  });
+
+  // ---- 直播流地址（浏览器页面播放器请求的 FLV / HLS 地址，可直接给 ffmpeg 拉流）----
+  app.get('/api/rooms/:roomId/stream', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    try {
+      const url = deps.collector.getStreamUrl(roomId);
+      if (!url) return reply.code(409).send({ error: '播放器尚未请求直播流（可能未开播）' });
+      return { url };
+    } catch (e: any) {
+      const code = e instanceof RoomActionError ? e.statusCode : 500;
+      return reply.code(code).send({ error: `获取直播流失败: ${e?.message ?? e}` });
+    }
+  });
+
+  // ---- 直播画面截图（JPEG）----
+  app.get('/api/rooms/:roomId/screenshot', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    try {
+      const jpeg = await deps.collector.screenshot(roomId);
+      return reply.type('image/jpeg').header('Cache-Control', 'no-store').send(jpeg);
+    } catch (e: any) {
+      const code = e instanceof RoomActionError ? e.statusCode : 500;
+      return reply.code(code).send({ error: `截图失败: ${e?.message ?? e}` });
     }
   });
 

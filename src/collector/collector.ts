@@ -25,6 +25,10 @@ export interface SessionLike {
   waitForLive(timeoutMs?: number): Promise<boolean>;
   /** 以登录账号发一条弹幕（仅浏览器内核支持） */
   sendChat?(text: string): Promise<void>;
+  /** 页面播放器最近请求的直播流地址（FLV / HLS），尚未请求时为 null（仅浏览器内核） */
+  streamUrl?(): string | null;
+  /** 直播画面截图，JPEG（仅浏览器内核） */
+  screenshot?(): Promise<Buffer>;
   /** 会话自带的直播间主播信息（轻量内核连接时解析；无则走 fetchRoomMeta 兜底） */
   meta?: RoomMeta | null;
 }
@@ -53,8 +57,8 @@ export interface CollectorOptions {
   onMessage: (msg: RawProtoMessage, meta: { roomId: string }) => void;
 }
 
-/** 发送弹幕失败，带建议的 HTTP 状态码 */
-export class SendChatError extends Error {
+/** 房间操作（发弹幕 / 取流地址 / 截图）失败，带建议的 HTTP 状态码 */
+export class RoomActionError extends Error {
   constructor(message: string, readonly statusCode: number) {
     super(message);
   }
@@ -167,11 +171,27 @@ export class Collector {
 
   /** 在已连接的直播间发一条弹幕 */
   async sendChat(roomId: string, text: string): Promise<void> {
+    const s = this.liveSession(roomId, 'sendChat', '发送弹幕');
+    await s.sendChat!(text);
+  }
+
+  /** 直播间正在播放的流地址，播放器还没请求时为 null */
+  getStreamUrl(roomId: string): string | null {
+    return this.liveSession(roomId, 'streamUrl', '获取直播流').streamUrl!();
+  }
+
+  /** 直播画面截图（JPEG） */
+  async screenshot(roomId: string): Promise<Buffer> {
+    return this.liveSession(roomId, 'screenshot', '截图').screenshot!();
+  }
+
+  /** 已进入直播的会话，且其内核支持 feature；否则抛出带状态码的 RoomActionError */
+  private liveSession(roomId: string, feature: 'sendChat' | 'streamUrl' | 'screenshot', what: string): SessionLike {
     const s = this.sessions.get(roomId);
-    if (!s) throw new SendChatError('房间未连接', 404);
-    if (!s.sendChat) throw new SendChatError('当前采集内核不支持发送弹幕（需浏览器内核）', 501);
-    if (s.status !== 'live') throw new SendChatError('房间弹幕通道未建立', 409);
-    await s.sendChat(text);
+    if (!s) throw new RoomActionError('房间未连接', 404);
+    if (!s[feature]) throw new RoomActionError(`当前采集内核不支持${what}（需浏览器内核）`, 501);
+    if (s.status !== 'live') throw new RoomActionError('房间弹幕通道未建立', 409);
+    return s;
   }
 
   /** 停止一个直播间的采集（保留房间记录与主播信息，随时可恢复连接） */
