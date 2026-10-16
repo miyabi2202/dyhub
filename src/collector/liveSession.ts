@@ -19,6 +19,11 @@ export interface LiveSessionOptions {
 
 export type LiveSessionStatus = 'connecting' | 'live' | 'closed';
 
+/** 直播间弹幕输入框：抖音网页端的 Slate 富文本编辑器（class 名混淆，按稳定属性定位） */
+const CHAT_INPUT = '[data-e2e="live-chatting"] [data-slate-editor="true"][contenteditable="true"]';
+/** 同一房间两次发送的最小间隔，避免连发触发风控 */
+const CHAT_MIN_INTERVAL_MS = Number(process.env.DYHUB_CHAT_INTERVAL_MS ?? 3000);
+
 export class LiveSession {
   readonly roomId: string;
   readonly startedAt: number = Date.now();
@@ -33,6 +38,9 @@ export class LiveSession {
   private stopped = false;
   /** 收到过抖音推送帧的 WebSocket（CDP requestId），只有它们关闭才算弹幕断开 */
   private pushSockets = new Set<string>();
+  /** 发送队列：同一页面一次只发一条 */
+  private sendQueue: Promise<unknown> = Promise.resolve();
+  private lastSentAt = 0;
 
   constructor(roomId: string, page: Page, cdp: CDPSession, opts: LiveSessionOptions) {
     this.roomId = roomId;
@@ -99,6 +107,40 @@ export class LiveSession {
       await new Promise((r) => setTimeout(r, 500));
     }
     return this.status === 'live';
+  }
+
+  /**
+   * 以登录账号在直播间发一条弹幕：在页面输入框里输入并回车，由页面自己完成签名与请求。
+   * 多次调用排队执行，两条之间至少间隔 DYHUB_CHAT_INTERVAL_MS。
+   * 回车后输入框清空即视为页面已提交；是否真的发出由调用方等回显确认。
+   */
+  sendChat(text: string): Promise<void> {
+    const run = this.sendQueue.then(() => this.doSendChat(text));
+    this.sendQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async doSendChat(text: string): Promise<void> {
+    if (this.stopped) throw new Error('会话已停止');
+    const wait = this.lastSentAt + CHAT_MIN_INTERVAL_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    const input = this.page.locator(CHAT_INPUT);
+    try {
+      await input.waitFor({ state: 'visible', timeout: 5000 });
+    } catch {
+      throw new Error('找不到弹幕输入框（未登录，或抖音改版）');
+    }
+    await input.click();
+    // 清掉输入框里残留的内容；Slate 只认真实输入事件，所以用键盘而不是 fill()
+    await this.page.keyboard.press('ControlOrMeta+A');
+    await this.page.keyboard.press('Backspace');
+    await this.page.keyboard.insertText(text);
+    await this.page.keyboard.press('Enter');
+    this.lastSentAt = Date.now();
+    await this.page.waitForTimeout(500);
+    // 编辑器空时只剩零宽占位符
+    const left = (await input.innerText()).replace(/[\u200b\s]/g, '');
+    if (left) throw new Error('回车后输入框未清空，弹幕可能未发出（风控 / 需验证 / 超出字数）');
   }
 
   stats() {

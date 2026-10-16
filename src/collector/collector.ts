@@ -23,6 +23,8 @@ export interface SessionLike {
   start?(): void;
   stop(): Promise<void>;
   waitForLive(timeoutMs?: number): Promise<boolean>;
+  /** 以登录账号发一条弹幕（仅浏览器内核支持） */
+  sendChat?(text: string): Promise<void>;
   /** 会话自带的直播间主播信息（轻量内核连接时解析；无则走 fetchRoomMeta 兜底） */
   meta?: RoomMeta | null;
 }
@@ -49,6 +51,13 @@ export interface CollectorOptions {
   createSession?: (roomId: string) => SessionLike;
   /** 采集到原始消息的回调（交给管道标准化） */
   onMessage: (msg: RawProtoMessage, meta: { roomId: string }) => void;
+}
+
+/** 发送弹幕失败，带建议的 HTTP 状态码 */
+export class SendChatError extends Error {
+  constructor(message: string, readonly statusCode: number) {
+    super(message);
+  }
 }
 
 export class Collector {
@@ -154,6 +163,15 @@ export class Collector {
     });
     this.progress.set(roomId, { step: 'launching', detail: '页面已打开，等待弹幕通道', ts: Date.now() });
     return session;
+  }
+
+  /** 在已连接的直播间发一条弹幕 */
+  async sendChat(roomId: string, text: string): Promise<void> {
+    const s = this.sessions.get(roomId);
+    if (!s) throw new SendChatError('房间未连接', 404);
+    if (!s.sendChat) throw new SendChatError('当前采集内核不支持发送弹幕（需浏览器内核）', 501);
+    if (s.status !== 'live') throw new SendChatError('房间弹幕通道未建立', 409);
+    await s.sendChat(text);
   }
 
   /** 停止一个直播间的采集（保留房间记录与主播信息，随时可恢复连接） */

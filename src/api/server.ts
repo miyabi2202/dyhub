@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import fastifyStatic from '@fastify/static';
-import { Collector } from '../collector/collector.js';
+import { Collector, SendChatError } from '../collector/collector.js';
 import * as cookieStore from '../collector/cookieStore.js';
 import * as loginWindow from '../collector/loginWindow.js';
 import { EventBus } from '../pipeline/eventBus.js';
@@ -30,6 +30,9 @@ function normalizeRoomIdInput(raw: unknown): string {
   // 其余只保留数字
   return s.replace(/\D/g, '');
 }
+
+/** 发送弹幕后等它出现在推送流里的最长时间 */
+const CHAT_ECHO_TIMEOUT_MS = 8000;
 
 export interface ApiDeps {
   collector: Collector;
@@ -99,6 +102,35 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     const info = deps.collector.getRoomInfo(roomId);
     if (!info) return reply.code(404).send({ error: '房间未连接' });
     return { room: info };
+  });
+
+  // ---- 发送弹幕（以登录账号发言，需浏览器内核 + 网页登录）----
+  app.post('/api/rooms/:roomId/chat', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    const { text: rawText } = (req.body ?? {}) as { text?: unknown };
+    const text = typeof rawText === 'string' ? rawText.trim() : '';
+    if (!text) return reply.code(400).send({ error: 'text 必填' });
+    // 先订阅再发送，等自己的弹幕从推送流回来，确认抖音收下了
+    let subId = 0;
+    const echo = new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), CHAT_ECHO_TIMEOUT_MS);
+      subId = deps.bus.subscribe({ roomId, type: 'chat' }, (ev) => {
+        if (ev.type === 'chat' && ev.data.content === text) {
+          clearTimeout(timer);
+          resolve(true);
+        }
+      });
+    });
+    try {
+      await deps.collector.sendChat(roomId, text);
+      const echoed = await echo;
+      return { ok: true, echoed };
+    } catch (e: any) {
+      const code = e instanceof SendChatError ? e.statusCode : 500;
+      return reply.code(code).send({ error: `发送失败: ${e?.message ?? e}` });
+    } finally {
+      deps.bus.unsubscribe(subId);
+    }
   });
 
   // ---- Webhook 管理 ----
