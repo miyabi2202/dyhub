@@ -63,6 +63,21 @@ export interface BrowserManagerOptions {
 export interface OpenedRoom {
   page: Page;
   cdp: CDPSession;
+  /** 播放器最近请求的直播流地址（FLV / HLS），还没请求时为 null */
+  streamUrl: () => string | null;
+}
+
+/** 播放器拉流的地址：FLV 或 HLS */
+const STREAM_URL = /^https?:\/\/[^/]+\/.+\.(flv|m3u8)(\?|$)/;
+
+/** 从 webcast/room/web/enter/ 的返回里取一个 FLV 地址：清晰度越低越省带宽，音频都一样 */
+function flvUrlFromEnter(body: any): string | null {
+  const urls: Record<string, string> | undefined = body?.data?.data?.[0]?.stream_url?.flv_pull_url;
+  if (!urls) return null;
+  for (const quality of ['SD2', 'SD1', 'HD1', 'FULL_HD1']) {
+    if (urls[quality]) return urls[quality];
+  }
+  return Object.values(urls)[0] ?? null;
 }
 
 export class BrowserManager {
@@ -150,6 +165,26 @@ export class BrowserManager {
       if (cookies.length) await ctx.addCookies(cookies);
     }
 
+    // 在打开页面前开始记录直播流地址，两个来源：
+    //  - 播放器的拉流请求：最准，但直播流的 fetch 永远不结束，不进 performance 资源记录，事后补不回来；
+    //    且登录态下播放器在 Web Worker 里拉流，页面看不到这条请求。
+    //  - 页面加载时请求的 webcast/room/web/enter/：返回各清晰度的 FLV 地址，兜底用。
+    // 地址带签名，播放器重连时会换新的。
+    let requested: string | null = null;
+    let entered: string | null = null;
+    page.on('request', (req) => {
+      if (STREAM_URL.test(req.url())) requested = req.url();
+    });
+    page.on('response', (res) => {
+      if (!res.url().includes('/webcast/room/web/enter/')) return;
+      res
+        .json()
+        .then((body) => {
+          entered = flvUrlFromEnter(body) ?? entered;
+        })
+        .catch(() => {});
+    });
+
     await page.goto(roomUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     // 等待页面标题就绪（页面加载完成信号）
     try {
@@ -165,7 +200,7 @@ export class BrowserManager {
         /* 点击失败不阻塞 */
       }
     }
-    return { page, cdp };
+    return { page, cdp, streamUrl: () => requested ?? entered };
   }
 
   async closeRoom(page: Page): Promise<void> {

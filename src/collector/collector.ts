@@ -154,8 +154,9 @@ export class Collector {
   private async createBrowserSession(roomId: string): Promise<SessionLike> {
     if (!this.browser) throw new Error('未配置浏览器内核（DYHUB_COLLECTOR=browser 时需要 DYHUB_CHROME）');
     const url = `https://live.douyin.com/${roomId}`;
-    const { page, cdp } = await this.browser.openRoom(url);
+    const { page, cdp, streamUrl } = await this.browser.openRoom(url);
     const session = new LiveSession(roomId, page, cdp, {
+      streamUrl,
       onMessage: (msg, meta) => this.onMessage(msg, meta),
       // 弹幕通道（重新）建立：清掉之前的断开错误
       onOpen: () => {
