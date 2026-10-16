@@ -133,16 +133,44 @@ export class LiveSession {
       throw new Error('找不到弹幕输入框（未登录，或抖音改版）');
     }
     await input.click();
-    // 清掉输入框里残留的内容；Slate 只认真实输入事件，所以用键盘而不是 fill()
-    await this.page.keyboard.press('ControlOrMeta+A');
-    await this.page.keyboard.press('Backspace');
+    // 上一条没发出去时文字还留在输入框里，先删干净再输入，免得拼在一起或被页面补发
+    await this.clearChatInput();
     await this.page.keyboard.insertText(text);
     await this.page.keyboard.press('Enter');
     this.lastSentAt = Date.now();
     await this.page.waitForTimeout(500);
-    // 编辑器空时只剩零宽占位符
-    const left = (await input.innerText()).replace(/[\u200b\s]/g, '');
-    if (left) throw new Error('回车后输入框未清空，弹幕可能未发出（风控 / 需验证 / 超出字数）');
+    if (await this.chatInputText()) {
+      // 没发出去：删掉，不让这段文字留在页面里
+      await this.clearChatInput().catch(() => {});
+      throw new Error('回车后输入框未清空，弹幕可能未发出（风控 / 需验证 / 超出字数）');
+    }
+  }
+
+  /** 输入框里的文字；编辑器空时只剩零宽占位符，算作空 */
+  private async chatInputText(): Promise<string> {
+    const text = await this.page.locator(CHAT_INPUT).innerText();
+    return text.replace(/[​\s]/g, '');
+  }
+
+  /**
+   * 删光输入框里的文字。Slate 只认真实输入事件，所以用键盘而不是 fill()：先全选再退格，
+   * 删不干净就把光标移到末尾逐个退格。
+   */
+  private async clearChatInput(): Promise<void> {
+    const { keyboard } = this.page;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const left = await this.chatInputText();
+      if (!left) return;
+      if (attempt === 0) {
+        await keyboard.press('ControlOrMeta+A');
+        await keyboard.press('Backspace');
+      } else {
+        await keyboard.press('ControlOrMeta+ArrowDown');
+        await keyboard.press('End');
+        for (let i = 0; i < [...left].length + 5; i++) await keyboard.press('Backspace');
+      }
+    }
+    if (await this.chatInputText()) throw new Error('输入框里有删不掉的文字，没有发送');
   }
 
   streamUrl(): string | null {
