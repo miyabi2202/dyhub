@@ -149,8 +149,11 @@ message User {
   Image avatarThumb = 9;
   Image avatarMedium = 10;
   Image avatarLarge = 11;
+  // 名字旁的勋章。21 是旧列表；61 是新列表，直播间会员（V / V年）只在 61 里（imageType 59）。
+  repeated Image badgeImageList = 21;
   PayGrade payGrade = 23;
   FansClub fansClub = 24;
+  repeated Image newBadgeImageList = 61;
   string secUid = 46;
   string idStr = 1029;
 }
@@ -159,6 +162,8 @@ message Image {
   string uri = 2;
   int64 height = 3;
   int64 width = 4;
+  // 勋章类型：1 荣誉等级、7 粉丝团等级、51 粉丝团进阶、59 直播间会员……
+  int32 imageType = 6;
   ImageContent content = 8;
   bool isAnimated = 9;
 }

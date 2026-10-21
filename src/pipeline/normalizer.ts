@@ -27,7 +27,30 @@ function toUser(body: any): DanmakuUser | undefined {
     secUid: u.secUid || undefined,
     payLevel: u.payGrade ? Number(longToStr(u.payGrade.level) || 0) : undefined,
     fansClub: toFansClub(u.fansClub?.data),
+    badges: toBadges(u.newBadgeImageList?.length ? u.newBadgeImageList : u.badgeImageList),
   };
+}
+
+/** 直播间会员勋章的 imageType；文字只是「勋章」，月 / 年会员靠图片名区分（subscribe_new / subscribe_new_yearly）。 */
+const SUBSCRIBE_BADGE = 59;
+
+/**
+ * 名字旁的勋章：直播间会员记为 V 或 V年，其余用勋章文字（content.alternativeText）；
+ * 没有文字的、只叫「勋章」的不输出。一个都没有时返回 undefined。
+ */
+function toBadges(images: any[] | undefined): string[] | undefined {
+  const badges: string[] = [];
+  for (const image of images ?? []) {
+    const url = firstUrl(image?.urlList) ?? String(image?.uri ?? '');
+    if (Number(image?.imageType) === SUBSCRIBE_BADGE || /\/subscribe_/.test(url)) {
+      badges.push(/yearly/.test(url) ? 'V年' : 'V');
+      continue;
+    }
+    const text = String(image?.content?.alternativeText ?? '').trim();
+    if (text && text !== '勋章') badges.push(text);
+  }
+  const unique = [...new Set(badges)];
+  return unique.length ? unique : undefined;
 }
 
 /** 粉丝团：名称为空且等级为 0 视为未加入，不输出。 */

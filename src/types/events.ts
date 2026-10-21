@@ -32,6 +32,7 @@ export interface DanmakuUser {
   secUid?: string;   // 安全 uid
   payLevel?: number; // 财富等级（抖音消费等级）；消息未携带时缺省
   fansClub?: DanmakuFansClub; // 粉丝团；未加入时缺省
+  badges?: string[]; // 名字旁的勋章：直播间会员为 V（月）/ V年（年），其余用勋章文字（粉丝团等级14级勋章）；没有时缺省
 }
 
 /** 用户所在粉丝团（抖音 User.fansClub.data） */
