@@ -169,7 +169,8 @@ curl -X POST http://localhost:8757/api/rooms/connect \
     "avatar": "https://p3.douyinpic.com/aweme/100x100/...",
     "secUid": "MS4wLjAB...",
     "payLevel": 23,
-    "fansClub": { "name": "甄选", "level": 12, "status": 1, "anchorId": "..." }
+    "fansClub": { "name": "甄选", "level": 12, "status": 1, "anchorId": "..." },
+    "badges": ["V年", "粉丝团等级12级勋章"]
   },
   "data": { "content": "劲道牛肉丸，3袋立享88折！" }
 }
@@ -178,6 +179,8 @@ curl -X POST http://localhost:8757/api/rooms/connect \
 > `roomId` 统一为用户连接的房间号（web_rid），与房间管理 / 订阅过滤一致。
 
 > **用户等级**：`user.payLevel` 为财富等级（抖音 `User.payGrade.level`），`user.fansClub` 为粉丝团名称与等级（`User.fansClub.data`），所有带用户的事件都会携带；消息里没有时字段缺省（未加入粉丝团则无 `fansClub`）。`fansClub` 一般是本直播间主播的粉丝团，可用 `anchorId` 核对。
+
+> **勋章**：`user.badges` 是名字旁的勋章，解码自 `User` 的勋章列表（21 是旧列表，61 是新列表）。直播间会员只在 61 里（imageType 59，文字只是「勋章」），按图片名记为月会员 `V`（`subscribe_new`）或年会员 `V年`（`subscribe_new_yearly`）；其余勋章用勋章文字（`粉丝团等级14级勋章`、`荣誉等级27级勋章`、`房管勋章`）。没有勋章时字段缺省。
 
 **事件类型**：
 
